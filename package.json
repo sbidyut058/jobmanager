@@ -1,0 +1,21 @@
+{
+  "name": "jobmanager",
+  "version": "1.0.0",
+  "main": "index.js",
+  "types": "dist-types/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "express": "^5.1.0",
+    "node-schedule": "^2.1.1"
+  },
+  "type": "module",
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

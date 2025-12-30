@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "allowJs": true,                 // allow compiling .js files
+    "declaration": true,             // generate .d.ts files
+    "emitDeclarationOnly": true,     // only emit type declarations, no JS
+    "outDir": "dist-types",          // where to put the generated .d.ts files
+    "strict": true,                  // better type safety
+    "esModuleInterop": true,
+    "moduleResolution": "node",
+    "target": "ES2020",
+    "module": "ESNext"
+  },
+  "include": ["**/*.js"]
+}
