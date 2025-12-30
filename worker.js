@@ -11,13 +11,23 @@ import WorkerFunction from './models/WorkerFunction.js';
 (async () => {
     if (!workerData) throw new JobError(400, 'Missing worker data');
 
+
+    const parser = (json) => {
+        return json ? JSON.parse(json,
+            (key, value) =>
+                typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)
+                    ? new Date(value)
+                    : value
+        ): null
+    }
+
     /** @type {number} */
     const jobid = workerData.jobid;
     /** @type {WorkerFunction} */
-    const method = workerData.method;
+    const method = parser(workerData.method);
     /** @type {WorkerFunction|null} */
-    let workerOnMessage = workerData.workerOnMessage ? workerData.workerOnMessage : null;
-    
+    let workerOnMessage = parser(workerData.workerOnMessage);
+
     /**
      * Sends an update message to parent thread
      * @param {any} [data] - Optional progress data

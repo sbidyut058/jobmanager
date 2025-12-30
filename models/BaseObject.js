@@ -90,7 +90,7 @@ class BaseObject {
       throw new Error(`Invalid value for '${prop}', expected one of: ${validValues.join(', ')}`);
     }
 
-    return type.includes('date') && value ? new Date(dateUtils.convertToOffset(new Date(type.endsWith('date') ? String(value).substring(0, 10) : value).toISOString(), '-5:30')) : value;
+    return (type === 'date' || type === 'datetime') && value ? new Date(dateUtils.convertToOffset(new Date(type.endsWith('date') ? String(value).substring(0, 10) : value).toISOString(), '-5:30')) : value;
   }
 
   /**

@@ -98,7 +98,7 @@ class JobQueue {
 
         /** @type {Worker} */
         const worker = new Worker(workerPath, {
-            workerData: { jobid, method: JSON.parse(JSON.stringify(method)), workerOnMessage: workerOnMessage ? JSON.parse(JSON.stringify(workerOnMessage)) : null }
+            workerData: { jobid, method: method ? JSON.stringify(method) : null, workerOnMessage: workerOnMessage ? JSON.stringify(workerOnMessage) : null }
         });
 
         nextJob.job.executor = worker;

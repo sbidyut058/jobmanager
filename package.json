@@ -12,7 +12,8 @@
   "description": "",
   "dependencies": {
     "express": "^5.1.0",
-    "node-schedule": "^2.1.1"
+    "node-schedule": "^2.1.1",
+    "nodemailer": "^7.0.12"
   },
   "type": "module",
   "devDependencies": {
