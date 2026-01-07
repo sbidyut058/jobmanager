@@ -68,6 +68,7 @@ const createJob = async (props) => {
         JobQueue.push(jobData); 
         JobQueue.runNextJobFromQueue();
     } else if (type === 'scheduler') {
+        if(!cronExp) throw new JobError(409, 'Provide Cron Expression');
         const cronExpString = new CronExp(cronExp).toString();
 
         job.executor = scheduleJob(cronExpString, async () => {
