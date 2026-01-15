@@ -101,7 +101,11 @@ class JobQueue {
             workerData: { jobid, method: method ? JSON.stringify(method) : null, workerOnMessage: workerOnMessage ? JSON.stringify(workerOnMessage) : null }
         });
 
+        // Update job data in JobMap
         nextJob.job.executor = worker;
+        nextJob.job.status = 202;
+        nextJob.job.response.status = 202;
+        nextJob.job.response.message = 'Job is Running';
 
         worker.on('message', (msg) => {
             if(msg.type === 'default') {

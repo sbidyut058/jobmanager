@@ -58,9 +58,9 @@ const createJob = async (props) => {
         title,
         type,
         description,
-        status: 202,
+        status: 201,
         parentId,
-        response: new ApiResponseEntity({ status: 202, message: 'Job is in Queue' })
+        response: new ApiResponseEntity({ status: 201, message: 'Job is in Queue' })
     });
 
     if (type === 'thread') {
@@ -88,6 +88,8 @@ const createJob = async (props) => {
             }
         });
         job.executor.invoke();
+        job.status = 202;
+        job.response.status = 202;
         job.response.message = 'Scheduler is Running';
     } else {
         throw new JobError(400, 'Invalid job type');
@@ -128,11 +130,16 @@ const cancelJob = (jobid) => {
     } else if (job.type === 'scheduler') {
         if (job.executor) {
             job.executor.cancel();
-            Array.from(jobMap)
-                    .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid)
-                    .forEach(([childJobId, childJob]) => {
-                        cancelJob(childJobId);
-                    });
+            const childJobs = Array.from(jobMap)
+                    .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid);
+            const activeJobs = childJobs.filter(([_, childJob]) => childJob.status === 202);
+            const queuedJobs = activeJobs.filter(([childJobId, _]) => JobQueue.hasJobInQueue(childJobId));
+            [
+                ...queuedJobs, 
+                ...activeJobs
+            ].forEach(([childJobId, childJob]) => {
+                cancelJob(childJobId);
+            });
             resMsg = `Scheduler Job[${jobid}] Cancelled Successfully`;
         }
     }
