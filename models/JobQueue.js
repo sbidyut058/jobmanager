@@ -87,47 +87,52 @@ class JobQueue {
     runNextJobFromQueue = () => {
         if (this.#activeWorkers >= this.#MAX_WORKERS || this.#items.length === 0) return;
 
-        const nextJob = this.shift();
-        this.#activeWorkers++;
+        while (this.#activeWorkers < this.#MAX_WORKERS && this.#items.length > 0) {
+            const nextJob = this.shift();
+            this.#activeWorkers++;
+    
+            const jobid = nextJob.jobid;
+            const method = nextJob.method;
+            const title = nextJob.title;
+            const mainThreadOnMessage = nextJob.messageHandler.mainThreadOnMessage;
+            const workerOnMessage = nextJob.messageHandler.workerOnMessage;
+    
+            /** @type {Worker} */
+            const worker = new Worker(workerPath, {
+                workerData: { jobid, method: method ? JSON.stringify(method) : null, workerOnMessage: workerOnMessage ? JSON.stringify(workerOnMessage) : null }
+            });
+    
+            // Update job data in JobMap
+            nextJob.job.executor = worker;
+            nextJob.job.status = 202;
+            nextJob.job.response.status = 202;
+            nextJob.job.response.message = 'Job is Running';
+    
+            worker.on('message', (msg) => {
+                if(msg.type === 'default') {
+                    const job = getJob(msg.jobid);
+                    job.status = msg.msg.status;
+                    Object.assign(job.response, msg.msg);
+                } else {
+                    mainThreadOnMessage(msg);
+                }
+            });
+    
+            worker.on('error', (error) => { 
+                console.error(`Worker Error [${title}]:`, error);
+                worker.terminate();
+            });
 
-        const jobid = nextJob.jobid;
-        const method = nextJob.method;
-        const title = nextJob.title;
-        const mainThreadOnMessage = nextJob.messageHandler.mainThreadOnMessage;
-        const workerOnMessage = nextJob.messageHandler.workerOnMessage;
+            worker.on('exit', (code) => {
+                console.log(`Worker Exit [${title}] Code:`, code);
+                this.#activeWorkers = Math.max(0, this.#activeWorkers - 1);
+                this.runNextJobFromQueue();
+            });
+        }
 
-        /** @type {Worker} */
-        const worker = new Worker(workerPath, {
-            workerData: { jobid, method: method ? JSON.stringify(method) : null, workerOnMessage: workerOnMessage ? JSON.stringify(workerOnMessage) : null }
-        });
-
-        // Update job data in JobMap
-        nextJob.job.executor = worker;
-        nextJob.job.status = 202;
-        nextJob.job.response.status = 202;
-        nextJob.job.response.message = 'Job is Running';
-
-        worker.on('message', (msg) => {
-            if(msg.type === 'default') {
-                const job = getJob(msg.jobid);
-                job.status = msg.msg.status;
-                Object.assign(job.response, msg.msg);
-            } else {
-                mainThreadOnMessage(msg);
-            }
-        });
-
-        worker.on('error', (error) => console.error(`Worker Error [${title}]:`, error));
-
-        worker.on('exit', (code) => {
-            console.log(`Worker Exit [${title}] Code:`, code);
-            this.#activeWorkers = Math.max(0, this.#activeWorkers - 1);
-            this.runNextJobFromQueue();
-        });
     };
 
 }
 
 const jobQueue = new JobQueue();
-jobQueue.runNextJobFromQueue();
 export default jobQueue;

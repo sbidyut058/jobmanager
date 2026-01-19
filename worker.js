@@ -115,6 +115,9 @@ import WorkerFunction from './models/WorkerFunction.js';
                 message: err.message
             })
         })));
+    } finally {
+        parentPort.close();
+        process.exit(0);
     }
 })().catch(error => {
     throw new JobError(500, error.message);
