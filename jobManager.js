@@ -9,8 +9,8 @@ import WorkerFunction from './models/WorkerFunction.js';
 import JobQueue from './models/JobQueue.js';
 import JobQueueItem from './models/JobQueueItem.js';
 import MessageHandler from './models/MessageHandler.js';
-import jobQueue from './models/JobQueue.js';
 import CronExp from './models/CronExp.js';
+import { sendMail } from './config/mail.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,7 +39,7 @@ const createJob = async (props) => {
 
     if (!props.type || !['thread', 'scheduler'].includes(props.type)) throw new JobError(400, 'Invalid or missing job type');
     const method = new WorkerFunction(props.method);
-    const messageHandler = new MessageHandler(props.messageHandler ?? { mainThreadOnMessage: () => {} });
+    const messageHandler = new MessageHandler(props.messageHandler ?? { mainThreadOnMessage: () => { } });
 
     try {
         const service = await import(method.serviceModule);
@@ -52,7 +52,7 @@ const createJob = async (props) => {
     const jobid = Date.now();
     if (parentId && !jobMap.has(parentId)) throw new JobError(404, `Parent job with id ${parentId} not found`);
 
-    if (Array.from(jobMap.values()).some(job => job.title === title && job.type === 'scheduler' && job.status === 202 )) throw new JobError(409, `Scheduler is already running`);
+    if (Array.from(jobMap.values()).some(job => job.title === title && job.type === 'scheduler' && job.status === 202)) throw new JobError(409, `Scheduler is already running`);
 
     const job = new Job({
         title,
@@ -65,14 +65,36 @@ const createJob = async (props) => {
 
     if (type === 'thread') {
         const jobData = new JobQueueItem({ jobid, method, title, job, messageHandler });
-        JobQueue.push(jobData); 
+        JobQueue.push(jobData);
         JobQueue.runNextJobFromQueue();
     } else if (type === 'scheduler') {
-        if(!cronExp) throw new JobError(409, 'Provide Cron Expression');
+        if (!cronExp) throw new JobError(409, 'Provide Cron Expression');
         const cronExpString = new CronExp(cronExp).toString();
 
         job.executor = scheduleJob(cronExpString, async () => {
             try {
+                const queuedOrActiveJobs = Array.from(jobMap)
+                    .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid && (childJob.status === 202 || childJob.status === 201))
+                if (queuedOrActiveJobs.length > 0) {
+                    console.log(`Scheduler job "${title}" skipped at ${new Date().toISOString()} due to existing queued or active child jobs.`);
+                    await sendMail({
+                        subject: 'Scheduler Job Skipped',
+                        text: `Scheduler job "${title}" skipped at ${new Date().toISOString()} due to existing queued or active child jobs.`
+                    }).catch((err) => {
+                        console.error('Error sending email:', err);
+                    });
+                    return;
+                }
+                if (JobQueue.length >= JobQueue.maxWorkers) {
+                    console.log(`Scheduler job "${title}" skipped at ${new Date().toISOString()} due to full job queue.`);
+                    await sendMail({
+                        subject: 'Scheduler Job Skipped',
+                        text: `Scheduler job "${title}" skipped at ${new Date().toISOString()} due to full job queue.`
+                    }).catch((err) => {
+                        console.error('Error sending email:', err);
+                    });
+                    return;
+                }
                 console.log(`Scheduler job "${title}" triggered at ${new Date().toISOString()}`);
                 await createJob({
                     type: 'thread',
@@ -85,6 +107,12 @@ const createJob = async (props) => {
             } catch (error) {
                 console.error(`Scheduler job "${title}" error:`, error);
                 cancelJob(jobid);
+                await sendMail({
+                    subject: 'Scheduler Job Error',
+                    text: `Scheduler job "${title}" encountered an error and has been cancelled. Error details: ${error.message}`
+                }).catch((err) => {
+                    console.error('Error sending email:', err);
+                });
             }
         });
         job.executor.invoke();
@@ -131,11 +159,11 @@ const cancelJob = (jobid) => {
         if (job.executor) {
             job.executor.cancel();
             const childJobs = Array.from(jobMap)
-                    .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid);
+                .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid);
             const activeJobs = childJobs.filter(([_, childJob]) => childJob.status === 202);
             const queuedJobs = activeJobs.filter(([childJobId, _]) => JobQueue.hasJobInQueue(childJobId));
             [
-                ...queuedJobs, 
+                ...queuedJobs,
                 ...activeJobs
             ].forEach(([childJobId, childJob]) => {
                 cancelJob(childJobId);
@@ -195,14 +223,14 @@ const getJobDetail = (jobid) => {
             status: utils.jobStatusFromCode(job.status),
             children: Array.from(jobMap)
                 .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid)
-                .map(([childJobId, childJob]) => 
-                    ({
-                        jobid: childJobId,
-                        type: childJob.type,
-                        title: childJob.title,
-                        description: childJob.description,
-                        status: utils.jobStatusFromCode(childJob.status)
-                    })
+                .map(([childJobId, childJob]) =>
+                ({
+                    jobid: childJobId,
+                    type: childJob.type,
+                    title: childJob.title,
+                    description: childJob.description,
+                    status: utils.jobStatusFromCode(childJob.status)
+                })
                 )
         }
     });
@@ -212,7 +240,7 @@ const getJobDetail = (jobid) => {
  * @returns {ApiResponseEntity} Returns a response with all jobs details with it's children
 */
 const getAllJobsDetail = () => {
-    const jobs = Array.from(jobMap.entries()).filter(([id, job])=>!job.parentId).map(([id, job]) => ({
+    const jobs = Array.from(jobMap.entries()).filter(([id, job]) => !job.parentId).map(([id, job]) => ({
         jobid: id,
         type: job.type,
         title: job.title,
@@ -220,14 +248,14 @@ const getAllJobsDetail = () => {
         status: utils.jobStatusFromCode(job.status),
         children: Array.from(jobMap)
             .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === id)
-            .map(([childJobId, childJob]) => 
-                ({
-                    jobid: childJobId,
-                    type: childJob.type,
-                    title: childJob.title,
-                    description: childJob.description,
-                    status: utils.jobStatusFromCode(childJob.status)
-                })
+            .map(([childJobId, childJob]) =>
+            ({
+                jobid: childJobId,
+                type: childJob.type,
+                title: childJob.title,
+                description: childJob.description,
+                status: utils.jobStatusFromCode(childJob.status)
+            })
             )
     }));
 

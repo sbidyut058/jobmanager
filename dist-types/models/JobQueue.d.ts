@@ -9,6 +9,10 @@ declare class JobQueue {
      */
     get length(): number;
     /**
+     * @returns {number} Maximum number of concurrent workers
+     */
+    get maxWorkers(): number;
+    /**
      * @returns {Array<JobQueueItem>} All items in the queue
      */
     get items(): Array<JobQueueItem>;

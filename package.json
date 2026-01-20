@@ -1,6 +1,6 @@
 {
   "name": "jobmanager",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "main": "index.js",
   "types": "dist-types/index.d.ts",
   "scripts": {
@@ -11,6 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "node-schedule": "^2.1.1",
     "nodemailer": "^7.0.12"

@@ -4,6 +4,7 @@ declare namespace _default {
     export { toCronExpression };
     export { processResponseEntity };
     export { jobStatusFromCode };
+    export { toBoolean };
 }
 export default _default;
 declare function sleep(ms: any): Promise<any>;
@@ -27,4 +28,5 @@ declare function processResponseEntity(res: Object, entity: ApiResponseEntity): 
  * @returns {string} Job status string.
  */
 declare function jobStatusFromCode(code: number): string;
+declare function toBoolean(value: any): boolean;
 import ApiResponseEntity from "../models/ApiResponseEntity.js";

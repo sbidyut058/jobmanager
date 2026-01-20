@@ -34,6 +34,14 @@ class JobQueue {
     get length() {
         return this.#items.length;
     }
+
+    /**
+     * @returns {number} Maximum number of concurrent workers
+     */
+    get maxWorkers() {
+        return this.#MAX_WORKERS;
+    }
+
     /**
      * @returns {Array<JobQueueItem>} All items in the queue
      */
@@ -85,7 +93,6 @@ class JobQueue {
 
     /** Run next thread job from queue */
     runNextJobFromQueue = () => {
-        if (this.#activeWorkers >= this.#MAX_WORKERS || this.#items.length === 0) return;
 
         while (this.#activeWorkers < this.#MAX_WORKERS && this.#items.length > 0) {
             const nextJob = this.shift();
