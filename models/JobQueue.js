@@ -13,8 +13,13 @@ const workerPath = path.resolve(__dirname, '../worker.js');
  */
 class JobQueue {
 
-    /**
-     * @type {Array<JobQueueItem>} props
+    /** Max Queue Items
+     * @type {number}
+     */
+    #MAX_QUEUE_ITEMS = os.cpus().length * 3;
+
+    /** Queue items
+     * @type {Array<JobQueueItem>} 
      */
     #items = [];
 
@@ -27,6 +32,13 @@ class JobQueue {
      * @type {number}
      */
     #activeWorkers = 0;
+
+    /** 
+     * @returns {number} Number of max queue items
+     */
+    get maxQueueItems() {
+        return this.#MAX_QUEUE_ITEMS;
+    }
 
     /**
      * @returns {number} Number of items in the queue
