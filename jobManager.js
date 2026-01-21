@@ -85,7 +85,7 @@ const createJob = async (props) => {
                     });
                     return;
                 }
-                if (JobQueue.maxQueueItems >= JobQueue.maxWorkers) {
+                if (JobQueue.length >= JobQueue.maxQueueItems) {
                     console.log(`Scheduler job "${title}" skipped at ${new Date().toISOString()} due to full job queue.`);
                     await sendMail({
                         subject: 'Scheduler Job Skipped',
