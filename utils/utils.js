@@ -54,6 +54,11 @@ function jobStatusFromCode(code) {
     return statusMap[code] || 'Unknown';
 }
 
+/**
+ * 
+ * @param {*} value 
+ * @returns 
+ */
 function toBoolean(value) {
     if (value === true) return true;
     if (value === false) return false;
@@ -69,11 +74,25 @@ function toBoolean(value) {
     throw new Error('Invalid boolean value');
 }
 
+/**
+ * For Payload Transformation of a job before current execution
+ * @param {any} payload 
+ * @returns {any}
+ */
+const jobPayloadTransformer = (payload) => {
+    return payload && payload instanceof Object ? Object.entries(payload)
+    .reduce((acc, [key, value]) => {
+        acc[key] = typeof value === 'function' ? value() : value;
+        return acc;
+    }, {}) : payload;
+}
+
 export default {
     sleep,
     asyncHandler,
     toCronExpression,
     processResponseEntity,
     jobStatusFromCode,
-    toBoolean
+    toBoolean,
+    jobPayloadTransformer
 }

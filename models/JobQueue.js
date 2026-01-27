@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getJob } from '../jobManager.js';
+import utils from '../utils/utils.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const workerPath = path.resolve(__dirname, '../worker.js');
@@ -111,10 +112,12 @@ class JobQueue {
             this.#activeWorkers++;
     
             const jobid = nextJob.jobid;
-            const method = nextJob.method;
+            const method = { ...nextJob.method };
+            method.payload = utils.jobPayloadTransformer(method.payload);
             const title = nextJob.title;
             const mainThreadOnMessage = nextJob.messageHandler.mainThreadOnMessage;
             const workerOnMessage = nextJob.messageHandler.workerOnMessage;
+            workerOnMessage.payload = utils.jobPayloadTransformer(workerOnMessage.payload);
     
             /** @type {Worker} */
             const worker = new Worker(workerPath, {
