@@ -113,11 +113,11 @@ class JobQueue {
     
             const jobid = nextJob.jobid;
             const method = { ...nextJob.method };
-            method.payload = utils.jobPayloadTransformer(method.payload);
+            if(method) method.payload = utils.jobPayloadTransformer(method?.payload ?? null);
             const title = nextJob.title;
             const mainThreadOnMessage = nextJob.messageHandler.mainThreadOnMessage;
             const workerOnMessage = nextJob.messageHandler.workerOnMessage;
-            workerOnMessage.payload = utils.jobPayloadTransformer(workerOnMessage.payload);
+            if(workerOnMessage) workerOnMessage.payload = utils.jobPayloadTransformer(workerOnMessage?.payload ?? null);
     
             /** @type {Worker} */
             const worker = new Worker(workerPath, {
