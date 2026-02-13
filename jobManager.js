@@ -53,6 +53,30 @@ const createJob = async (props) => {
     if (parentId && !jobMap.has(parentId)) throw new JobError(404, `Parent job with id ${parentId} not found`);
 
     if (Array.from(jobMap.values()).some(job => job.title === title && job.type === 'scheduler' && job.status === 202)) throw new JobError(409, `Scheduler is already running`);
+    if(type === "thread") {
+        const queuedOrActiveJobs = Array.from(jobMap)
+                    .filter(([_, childJob]) => String(childJob.title).toLocaleUpperCase() === String(title).toLocaleUpperCase() && childJob.parentId === parentId && (childJob.status === 202 || childJob.status === 201))
+        if (queuedOrActiveJobs.length > 0) {
+            console.log(`"${title}" skipped at ${new Date().toISOString()} due to existing queued or active child jobs.`);
+            await sendMail({
+                subject: `${parentId ? "Scheduler":""} Job Skipped`,
+                text: `"${title}" skipped at ${new Date().toISOString()} due to existing queued or active child jobs.`
+            }).catch((err) => {
+                console.error('Error sending email:', err);
+            });
+            return;
+        }
+        if (JobQueue.length >= JobQueue.maxQueueItems) {
+            console.log(`"${title}" skipped at ${new Date().toISOString()} due to full job queue.`);
+            await sendMail({
+                subject: `${parentId ? "Scheduler":""} Job Skipped`,
+                text: `"${title}" skipped at ${new Date().toISOString()} due to full job queue.`
+            }).catch((err) => {
+                console.error('Error sending email:', err);
+            });
+            return;
+        }
+    }
 
     const job = new Job({
         title,
@@ -73,28 +97,6 @@ const createJob = async (props) => {
 
         job.executor = scheduleJob(cronExpString, async () => {
             try {
-                const queuedOrActiveJobs = Array.from(jobMap)
-                    .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid && (childJob.status === 202 || childJob.status === 201))
-                if (queuedOrActiveJobs.length > 0) {
-                    console.log(`Scheduler job "${title}" skipped at ${new Date().toISOString()} due to existing queued or active child jobs.`);
-                    await sendMail({
-                        subject: 'Scheduler Job Skipped',
-                        text: `Scheduler job "${title}" skipped at ${new Date().toISOString()} due to existing queued or active child jobs.`
-                    }).catch((err) => {
-                        console.error('Error sending email:', err);
-                    });
-                    return;
-                }
-                if (JobQueue.length >= JobQueue.maxQueueItems) {
-                    console.log(`Scheduler job "${title}" skipped at ${new Date().toISOString()} due to full job queue.`);
-                    await sendMail({
-                        subject: 'Scheduler Job Skipped',
-                        text: `Scheduler job "${title}" skipped at ${new Date().toISOString()} due to full job queue.`
-                    }).catch((err) => {
-                        console.error('Error sending email:', err);
-                    });
-                    return;
-                }
                 console.log(`Scheduler job "${title}" triggered at ${new Date().toISOString()}`);
                 await createJob({
                     type: 'thread',
@@ -109,7 +111,7 @@ const createJob = async (props) => {
                 cancelJob(jobid);
                 await sendMail({
                     subject: 'Scheduler Job Error',
-                    text: `Scheduler job "${title}" encountered an error and has been cancelled. Error details: ${error.message}`
+                    text: `"${title}" encountered an error and has been cancelled. Error details: ${error.message}`
                 }).catch((err) => {
                     console.error('Error sending email:', err);
                 });
