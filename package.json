@@ -2,7 +2,6 @@
   "name": "jobmanager",
   "version": "1.0.3",
   "main": "index.js",
-  "types": "dist-types/index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -14,10 +13,14 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "node-schedule": "^2.1.1",
-    "nodemailer": "^7.0.12"
+    "nodemailer": "^7.0.12",
+    "zod": "^4.3.6"
   },
   "type": "module",
   "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node-schedule": "^2.1.8",
+    "@types/nodemailer": "^7.0.11",
     "typescript": "^5.9.2"
   }
 }

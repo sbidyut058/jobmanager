@@ -1,45 +1,29 @@
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { scheduleJob } from 'node-schedule';
-import Job from './models/Job.js';
-import ApiResponseEntity from './models/ApiResponseEntity.js';
+import { type ApiResponseType } from './validationSchemas/ApiResponseSchema.js';
 import JobError from './exception/JobError.js';
 import utils from './utils/utils.js';
-import WorkerFunction from './models/WorkerFunction.js';
-import JobQueue from './models/JobQueue.js';
-import JobQueueItem from './models/JobQueueItem.js';
-import MessageHandler from './models/MessageHandler.js';
-import CronExp from './models/CronExp.js';
+import JobQueue from './JobQueue.js';
+import { JobQueueItemSchema } from './validationSchemas/JobQueueItem.js';
 import { sendMail } from './config/mail.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const workerPath = path.resolve(__dirname, './worker.js');
+import { jobSchema, ReqCreateJobSchema, type JobType, type ReqCreateJobType } from './validationSchemas/Job.js';
+import { CronExp } from './validationSchemas/CronExp.js';
 
 /** Map of jobId -> Job 
  * @type {Map<number, Job>}
 */
-const jobMap = new Map();
+const jobMap: Map<number, JobType> = new Map();
 
 /**
  * Create a job (thread or scheduler)
- * @param {Object} props
- * @param {'thread'|'scheduler'} props.type
- * @param {WorkerFunction} props.method
- * @param {string} props.title
- * @param {string} [props.description]
- * @param {string} [props.parentId]
- * @param {import('./models/CronExp.js').CronExpObj} [props.cronExp] - Only for scheduler
- * @param {MessageHandler} [props.messageHandler] - Optional message handlers for worker thread
+ * @param {ReqCreateJobType} props
  * @throws {JobError} When service not found, parent job not found, or scheduler with same title already running
  * @returns {Promise<string>} jobid
  */
-const createJob = async (props) => {
-    const { type, title, description, parentId, cronExp } = props;
+const createJob = async (props: ReqCreateJobType): Promise<number> => {
+    const validatedProps = ReqCreateJobSchema.parse(props);
+    const { type, title, description, parentId, cronExp, method } = validatedProps;
 
-    if (!props.type || !['thread', 'scheduler'].includes(props.type)) throw new JobError(400, 'Invalid or missing job type');
-    const method = new WorkerFunction(props.method);
-    const messageHandler = new MessageHandler(props.messageHandler ?? { mainThreadOnMessage: () => { } });
+    const messageHandler = validatedProps.messageHandler ?? { mainThreadOnMessage: () => { } };
 
     try {
         const service = await import(method.serviceModule);
@@ -54,34 +38,34 @@ const createJob = async (props) => {
 
     if (Array.from(jobMap.values()).some(job => job.title === title && job.type === 'scheduler' && job.status === 202)) throw new JobError(409, `Scheduler is already running`);
 
-    const job = new Job({
+    const job = jobSchema.parse({
         title,
         type,
         description,
         status: 201,
         parentId,
-        response: new ApiResponseEntity({ status: 201, message: 'Job is in Queue' })
+        response: { status: 201, message: 'Job is in Queue' }
     });
 
     if (type === 'thread') {
-        const jobData = new JobQueueItem({ jobid, method, title, job, messageHandler });
+        const jobData = JobQueueItemSchema.parse({ jobid, method, title, job, messageHandler });
         JobQueue.push(jobData);
         JobQueue.runNextJobFromQueue();
     } else if (type === 'scheduler') {
         if (!cronExp) throw new JobError(409, 'Provide Cron Expression');
-        const cronExpString = new CronExp(cronExp).toString();
+        const cronExpString = CronExp(cronExp).toString();
 
         job.executor = scheduleJob(cronExpString, async () => {
             try {
                 const queuedOrActiveJobs = Array.from(jobMap)
-                    .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid && (childJob.status === 202 || childJob.status === 201))
+                    .filter(([_, childJob]) => childJob.parentId && childJob.parentId >= 0 && childJob.parentId === jobid && (childJob.status === 202 || childJob.status === 201))
                 if (queuedOrActiveJobs.length > 0) {
                     console.log(`Scheduler job "${title}" skipped at ${new Date().toISOString()} due to existing queued or active child jobs.`);
                     await sendMail({
                         subject: 'Scheduler Job Skipped',
                         text: `Scheduler job "${title}" skipped at ${new Date().toISOString()} due to existing queued or active child jobs.`
-                    }).catch((err) => {
-                        console.error('Error sending email:', err);
+                    }).catch((err: any) => {
+                        console.error('Error sending email:', err.message ?? 'Unknown error');
                     });
                     return;
                 }
@@ -90,8 +74,8 @@ const createJob = async (props) => {
                     await sendMail({
                         subject: 'Scheduler Job Skipped',
                         text: `Scheduler job "${title}" skipped at ${new Date().toISOString()} due to full job queue.`
-                    }).catch((err) => {
-                        console.error('Error sending email:', err);
+                    }).catch((err: any) => {
+                        console.error('Error sending email:', err.message ?? 'Unknown error');
                     });
                     return;
                 }
@@ -109,9 +93,9 @@ const createJob = async (props) => {
                 cancelJob(jobid);
                 await sendMail({
                     subject: 'Scheduler Job Error',
-                    text: `Scheduler job "${title}" encountered an error and has been cancelled. Error details: ${error.message}`
-                }).catch((err) => {
-                    console.error('Error sending email:', err);
+                    text: `Scheduler job "${title}" encountered an error and has been cancelled. Error details: ${(error as Error).message ?? 'Unknown error'}`
+                }).catch((err: any) => {
+                    console.error('Error sending email:', err.message ?? 'Unknown error');
                 });
             }
         });
@@ -132,7 +116,7 @@ const createJob = async (props) => {
  * @throws {JobError} When job not found
  * @returns {Job} Returns the job
  */
-const getJob = (jobid) => {
+const getJob = (jobid: number): JobType => {
     const job = jobMap.get(jobid);
     if (!job) throw new JobError(404, 'Job not found');
     return job;
@@ -143,29 +127,29 @@ const getJob = (jobid) => {
  * @throws {JobError} When job not found
  * @returns {ApiResponseEntity} Returns a response
  */
-const cancelJob = (jobid) => {
+const cancelJob = (jobid: number): ApiResponseType => {
     const job = getJob(jobid);
     let resMsg = '';
 
     if (job.type === 'thread') {
         if (job.executor) {
-            job.executor.terminate();
+            (job.executor as Worker).terminate();
             resMsg = `Job[${jobid}] Terminated Successfully`;
         } else {
             JobQueue.removeByJobId(jobid);
             resMsg = `Job[${jobid}] removed from queue Successfully`;
         }
-    } else if (job.type === 'scheduler') {
+    } else {
         if (job.executor) {
             job.executor.cancel();
             const childJobs = Array.from(jobMap)
-                .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid);
+                .filter(([_, childJob]) => childJob.parentId && childJob.parentId >= 0 && childJob.parentId === jobid);
             const activeJobs = childJobs.filter(([_, childJob]) => childJob.status === 202);
             const queuedJobs = activeJobs.filter(([childJobId, _]) => JobQueue.hasJobInQueue(childJobId));
             [
                 ...queuedJobs,
                 ...activeJobs
-            ].forEach(([childJobId, childJob]) => {
+            ].forEach(([childJobId, _]) => {
                 cancelJob(childJobId);
             });
             resMsg = `Scheduler Job[${jobid}] Cancelled Successfully`;
@@ -177,42 +161,42 @@ const cancelJob = (jobid) => {
     job.response.status = 499;
     job.response.message = resMsg;
     job.executor = null;
-    console.log(resMsg);
-    return new ApiResponseEntity({ status: 499, message: resMsg });
+    return { status: 499, message: resMsg };
 };
 
 
 /** Clear jobs that are not in progress or finished or not in queue */
-const clearJobData = () => {
+const clearJobData = (): ApiResponseType => {
     for (const [jobid, job] of jobMap) {
         if (job.status !== 202 && !JobQueue.hasJobInQueue(jobid)) {
             jobMap.delete(jobid);
         }
     }
-    return new ApiResponseEntity({ status: 200, message: 'Cleared job data for all completed/cancelled jobs' });
+    return { status: 200, message: 'Cleared job data for all completed/cancelled jobs' };
 };
 
 /** Clear job data by jobid
  * @param {number} jobid - Job ID to clear
+ * @returns {ApiResponseType} Returns a response with status and message
  * @throws {JobError} - When job not found or job is in-progress or in queue
  */
-const clearJobDataByJobId = (jobid) => {
+const clearJobDataByJobId = (jobid: number): ApiResponseType => {
     const job = getJob(jobid);
     if (job.status === 202) throw new JobError(400, 'Cannot clear job data for in-progress jobs');
     if (JobQueue.hasJobInQueue(jobid)) throw new JobError(400, 'Cannot clear job data for jobs in queue. You may cancel the job first.');
     jobMap.delete(jobid);
-    return new ApiResponseEntity({ status: 200, message: `Job data for jobid ${jobid} cleared successfully` });
+    return { status: 200, message: `Job data for jobid ${jobid} cleared successfully` };
 };
 
 /** Get job details 
  * @param {number} jobid - Job id of associate job
  * @throws {JobError} - When job not found
- * @returns {ApiResponseEntity} Returns a response with job detail with it's children
+ * @returns {ApiResponseType} Returns a response with job detail with it's children
 */
-const getJobDetail = (jobid) => {
+const getJobDetail = (jobid: number): ApiResponseType => {
     const job = getJob(jobid);
 
-    return new ApiResponseEntity({
+    return {
         status: 200,
         message: 'Job detail fetched',
         data: {
@@ -222,7 +206,7 @@ const getJobDetail = (jobid) => {
             description: job.description,
             status: utils.jobStatusFromCode(job.status),
             children: Array.from(jobMap)
-                .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === jobid)
+                .filter(([_, childJob]) => childJob.parentId &&childJob.parentId >= 0 && childJob.parentId === jobid)
                 .map(([childJobId, childJob]) =>
                 ({
                     jobid: childJobId,
@@ -233,7 +217,7 @@ const getJobDetail = (jobid) => {
                 })
                 )
         }
-    });
+    };
 };
 
 /** Get all active jobs 
