@@ -1,17 +1,20 @@
-const JOB_TYPES = {
+export const JOB_TYPES = {
     SCHEDULER: "scheduler",
     THREAD: "thread"
 }
 
-const STATUS_MAP = {
-    200: 'Completed',
-    201: 'In Queue',
-    202: 'In Progress',
-    499: 'Cancelled',
-    500: 'Failed'
-};
-
-export {
-    JOB_TYPES,
-    STATUS_MAP
+export enum Status {
+  COMPLETED = 200,
+  IN_QUEUE = 201,
+  IN_PROGRESS = 202,
+  CANCELLED = 499,
+  FAILED = 500
 }
+
+export const STATUS_LABEL: Record<Status, string> = {
+  [Status.COMPLETED]: 'Completed',
+  [Status.IN_QUEUE]: 'In Queue',
+  [Status.IN_PROGRESS]: 'In Progress',
+  [Status.CANCELLED]: 'Cancelled',
+  [Status.FAILED]: 'Failed'
+};

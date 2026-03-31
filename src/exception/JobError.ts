@@ -4,18 +4,21 @@
  * @extends {Error}
  */
 class JobError extends Error {
+  public status: number;
   /**
    * Creates a new JobError.
    * @param {number} status - HTTP-like status code of the error.
    * @param {string} [message] - Optional error message.
    */
-  constructor(status, message = 'Unknown Job Error') {
+  constructor(status: number, message: string | undefined = 'Unknown Job Error') {
     super(message);
-    this.name = this.constructor.name; // <— Important: proper class name in stack trace
+
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.name = this.constructor.name;
     this.status = status;
 
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
+    if ('captureStackTrace' in Error) {
+      (Error as any).captureStackTrace(this, this.constructor);
     }
   }
 }

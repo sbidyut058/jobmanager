@@ -5,8 +5,9 @@ import utils from './utils/utils.js';
 import JobQueue from './JobQueue.js';
 import { JobQueueItemSchema } from './validationSchemas/JobQueueItem.js';
 import { sendMail } from './config/mail.js';
-import { jobSchema, ReqCreateJobSchema, type JobType, type ReqCreateJobType } from './validationSchemas/Job.js';
+import { ReqCreateJobSchema, type JobType, type ReqCreateJobType } from './validationSchemas/Job.js';
 import { CronExp } from './validationSchemas/CronExp.js';
+import { Status, STATUS_LABEL } from './utils/constants.js';
 
 /** Map of jobId -> Job 
  * @type {Map<number, Job>}
@@ -38,14 +39,14 @@ const createJob = async (props: ReqCreateJobType): Promise<number> => {
 
     if (Array.from(jobMap.values()).some(job => job.title === title && job.type === 'scheduler' && job.status === 202)) throw new JobError(409, `Scheduler is already running`);
 
-    const job = jobSchema.parse({
+    const job: JobType = {
         title,
         type,
         description,
-        status: 201,
+        status: Status.IN_QUEUE,
         parentId,
-        response: { status: 201, message: 'Job is in Queue' }
-    });
+        response: { status: Status.IN_QUEUE, message: 'Job is in Queue' }
+    };
 
     if (type === 'thread') {
         const jobData = JobQueueItemSchema.parse({ jobid, method, title, job, messageHandler });
@@ -100,8 +101,8 @@ const createJob = async (props: ReqCreateJobType): Promise<number> => {
             }
         });
         job.executor.invoke();
-        job.status = 202;
-        job.response.status = 202;
+        job.status = Status.IN_PROGRESS;
+        job.response.status = Status.IN_PROGRESS;
         job.response.message = 'Scheduler is Running';
     } else {
         throw new JobError(400, 'Invalid job type');
@@ -125,7 +126,7 @@ const getJob = (jobid: number): JobType => {
 /** Cancel a job (thread or scheduler)
  * @param {number} jobid - jobid of associated job
  * @throws {JobError} When job not found
- * @returns {ApiResponseEntity} Returns a response
+ * @returns {ApiResponseType} Returns a response
  */
 const cancelJob = (jobid: number): ApiResponseType => {
     const job = getJob(jobid);
@@ -204,7 +205,7 @@ const getJobDetail = (jobid: number): ApiResponseType => {
             type: job.type,
             title: job.title,
             description: job.description,
-            status: utils.jobStatusFromCode(job.status),
+            status: STATUS_LABEL[job.status],
             children: Array.from(jobMap)
                 .filter(([_, childJob]) => childJob.parentId &&childJob.parentId >= 0 && childJob.parentId === jobid)
                 .map(([childJobId, childJob]) =>
@@ -213,17 +214,16 @@ const getJobDetail = (jobid: number): ApiResponseType => {
                     type: childJob.type,
                     title: childJob.title,
                     description: childJob.description,
-                    status: utils.jobStatusFromCode(childJob.status)
-                })
-                )
+                    status: STATUS_LABEL[childJob.status]
+                }))
         }
     };
 };
 
 /** Get all active jobs 
- * @returns {ApiResponseEntity} Returns a response with all jobs details with it's children
+ * @returns {ApiResponseType} Returns a response with all jobs details with it's children
 */
-const getAllJobsDetail = () => {
+const getAllJobsDetail = (): ApiResponseType => {
     const jobs = Array.from(jobMap.entries()).filter(([id, job]) => !job.parentId).map(([id, job]) => ({
         jobid: id,
         type: job.type,
@@ -231,30 +231,29 @@ const getAllJobsDetail = () => {
         description: job.description,
         status: utils.jobStatusFromCode(job.status),
         children: Array.from(jobMap)
-            .filter(([_, childJob]) => childJob.parentId >= 0 && childJob.parentId === id)
+            .filter(([_, childJob]) => childJob.parentId && childJob.parentId >= 0 && childJob.parentId === id)
             .map(([childJobId, childJob]) =>
             ({
                 jobid: childJobId,
                 type: childJob.type,
                 title: childJob.title,
                 description: childJob.description,
-                status: utils.jobStatusFromCode(childJob.status)
-            })
-            )
+                status: STATUS_LABEL[childJob.status]
+            }))
     }));
 
-    return new ApiResponseEntity({
+    return {
         status: 200,
         message: jobs.length ? 'Fetched all jobs details' : 'No jobs are present',
         data: jobs
-    });
+    };
 };
 
 /** Get job response
  * @param {number} jobid - Job id of associate job
- * @returns {ApiResponseEntity|null} response - job Response
+ * @returns {ApiResponseType|null} response - job Response
 */
-const getJobResponse = (jobid) => {
+const getJobResponse = (jobid: number): ApiResponseType | null => {
     const job = getJob(jobid);
     return job.response;
 }
@@ -263,7 +262,7 @@ const getJobResponse = (jobid) => {
  * @param {number} jobid - Job id of associate job
  * @returns {Function|null} postMessage function or null if not a thread job or job not found
 */
-const getJobMainThreadPostMessage = (jobid) => {
+const getJobMainThreadPostMessage = (jobid: number) => {
     const job = getJob(jobid);
     return job.executor ? job.executor.postMessage : null;
 }
