@@ -4,7 +4,7 @@ import { WorkerFunctionSchema } from "./WorkerFunction.js";
 export const WorkerDataSchema = z.object({
   jobid: z.number(),
   method: WorkerFunctionSchema,
-  workerOnMessage: z.union([WorkerFunctionSchema, z.null()])
+  workerOnMessage: WorkerFunctionSchema.nullable()
 });
 
-export type WorkerData = z.infer<typeof WorkerDataSchema>;
+export type WorkerDataType = z.infer<typeof WorkerDataSchema>;

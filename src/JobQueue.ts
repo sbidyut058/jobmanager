@@ -5,12 +5,15 @@ import { fileURLToPath } from 'url';
 import { getJob } from './jobManager.js';
 import type { JobQueueItemType } from './validationSchemas/JobQueueItem.js';
 import utils from './utils/utils.js';
-import { WorkerDataSchema } from './validationSchemas/WorkerData.js';
+import { type WorkerDataType } from './validationSchemas/WorkerData.js';
 import { MESSAGE_TYPES, Status, STATUS_LABEL } from './utils/constants.js';
 import { ChannelMessageSchema, type ChannelMessageType } from './validationSchemas/ChannelMessage.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const workerPath = path.resolve(__dirname, '../worker.js');
+const workerPath = path.resolve(__dirname, './worker.js');
+
+
+const getWorkerInstance = (params: WorkerDataType) => new Worker(workerPath, { workerData: params });   
 
 /**
  * JobQueue manages a queue of JobQueueItem instances.
@@ -121,10 +124,8 @@ class JobQueue {
             const mainThreadOnMessage = nextJob.messageHandler?.mainThreadOnMessage;
             const workerOnMessage = nextJob.messageHandler?.workerOnMessage;
             if(workerOnMessage) workerOnMessage.payload = utils.jobPayloadTransformer(workerOnMessage.payload ?? {});
-    
-            const worker: Worker = new Worker(workerPath, {
-                workerData: WorkerDataSchema.parse({ jobid, method: method ? JSON.stringify(method) : null, workerOnMessage: workerOnMessage ? JSON.stringify(workerOnMessage) : null })
-            });
+
+            const worker = getWorkerInstance({ jobid, method: method ?? null, workerOnMessage: workerOnMessage ?? null });
     
             // Update job data in JobMap
             nextJob.job.executor = worker;
