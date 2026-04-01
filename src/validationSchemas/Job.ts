@@ -1,10 +1,11 @@
 import z from "zod";
-import { ApiResponseSchema } from "./ApiResponseSchema.js";
+import { ApiResponseSchema } from "./ApiResponse.js";
 import { Job } from "node-schedule";
 import { MessageHandlerSchema } from "./MessageHandler.js";
 import { WorkerFunctionSchema } from "./WorkerFunction.js";
 import { CronExpSchema } from "./CronExp.js";
-import { Status } from "../utils/constants.js";
+import { JOB_TYPES, Status } from "../utils/constants.js";
+import { Worker } from 'worker_threads';
 
 // Common fields
 const baseSchema = {
@@ -16,20 +17,23 @@ const baseSchema = {
 };
 
 // Thread job
-const threadSchema = z.object({
+export const threadSchema = z.object({
   ...baseSchema,
-  type: z.literal("thread"),
-  executor: z.instanceof(globalThis.Worker).optional().nullable()
+  type: z.literal(JOB_TYPES.THREAD),
+  executor: z.instanceof(Worker).optional().nullable()
 });
 
+export type ThreadJobType = z.infer<typeof threadSchema>;
+
 // Scheduler job
-const schedulerSchema = z.object({
+export const schedulerSchema = z.object({
   ...baseSchema,
-  type: z.literal("scheduler"),
+  type: z.literal(JOB_TYPES.SCHEDULER),
   executor: z.instanceof(Job).optional().nullable(),
 });
 
-// Final schema
+export type SchedulerJobType = z.infer<typeof schedulerSchema>;
+
 export const jobSchema = z.discriminatedUnion("type", [
   threadSchema,
   schedulerSchema
@@ -38,7 +42,7 @@ export const jobSchema = z.discriminatedUnion("type", [
 export type JobType = z.infer<typeof jobSchema>;
 
 export const ReqCreateJobSchema = z.object({
-  type: z.enum(["thread", "scheduler"]),
+  type: z.enum(JOB_TYPES),
   title: z.string(),
   description: z.string().optional().nullable().default(null),
   parentId: z.number().optional().nullable().default(null),

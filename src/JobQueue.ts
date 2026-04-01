@@ -5,6 +5,9 @@ import { fileURLToPath } from 'url';
 import { getJob } from './jobManager.js';
 import type { JobQueueItemType } from './validationSchemas/JobQueueItem.js';
 import utils from './utils/utils.js';
+import { WorkerDataSchema } from './validationSchemas/WorkerData.js';
+import { MESSAGE_TYPES, Status, STATUS_LABEL } from './utils/constants.js';
+import { ChannelMessageSchema, type ChannelMessageType } from './validationSchemas/ChannelMessage.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const workerPath = path.resolve(__dirname, '../worker.js');
@@ -20,7 +23,7 @@ class JobQueue {
     #MAX_QUEUE_ITEMS: number = os.cpus().length * 3;
 
     /** Queue items
-     * @type {Array<JobQueueItem>} 
+     * @type {Array<JobQueueItemType>} 
      */
     #items: Array<JobQueueItemType> = [];
 
@@ -120,24 +123,23 @@ class JobQueue {
             if(workerOnMessage) workerOnMessage.payload = utils.jobPayloadTransformer(workerOnMessage.payload ?? {});
     
             const worker: Worker = new Worker(workerPath, {
-                workerData: { jobid, method: method ? JSON.stringify(method) : null, workerOnMessage: workerOnMessage ? JSON.stringify(workerOnMessage) : null }
+                workerData: WorkerDataSchema.parse({ jobid, method: method ? JSON.stringify(method) : null, workerOnMessage: workerOnMessage ? JSON.stringify(workerOnMessage) : null })
             });
     
             // Update job data in JobMap
-            nextJob.job.executor = worker as any;
-            nextJob.job.status = 202;
-            if(nextJob.job.response) {
-                nextJob.job.response.status = 202;
-                nextJob.job.response.message = 'Job is Running';
-            }
+            nextJob.job.executor = worker;
+            nextJob.job.status = Status.IN_PROGRESS;
+            nextJob.job.response.status = Status.IN_PROGRESS;
+            nextJob.job.response.message = STATUS_LABEL[Status.IN_PROGRESS];
     
-            worker.on('message', (msg) => {
-                if(msg.type === 'default') {
-                    const job = getJob(msg.jobid);
-                    job.status = msg.msg.status;
-                    Object.assign(job.response, msg.msg);
+            worker.on('message', (msg: ChannelMessageType) => {
+                const parsedMsg = ChannelMessageSchema.parse(msg);
+                if(parsedMsg.type === MESSAGE_TYPES.DEFAULT) {
+                    const job = getJob(parsedMsg.jobid);
+                    job.status = parsedMsg.msg.status;
+                    Object.assign(job.response, parsedMsg.msg);
                 } else {
-                    mainThreadOnMessage(msg);
+                    mainThreadOnMessage?.(parsedMsg.msg);
                 }
             });
     

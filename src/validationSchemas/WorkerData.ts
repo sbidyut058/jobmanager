@@ -6,3 +6,5 @@ export const WorkerDataSchema = z.object({
   method: WorkerFunctionSchema,
   workerOnMessage: z.union([WorkerFunctionSchema, z.null()])
 });
+
+export type WorkerData = z.infer<typeof WorkerDataSchema>;

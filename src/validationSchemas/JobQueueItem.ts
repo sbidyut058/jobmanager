@@ -1,5 +1,5 @@
 import z from "zod";
-import { jobSchema } from "./Job.js";
+import { threadSchema } from "./Job.js";
 import { MessageHandlerSchema } from "./MessageHandler.js";
 import { WorkerFunctionSchema } from "./WorkerFunction.js";
 
@@ -7,7 +7,7 @@ export const JobQueueItemSchema = z.object({
   jobid: z.number(),
   method: WorkerFunctionSchema,
   title: z.string(),
-  job: jobSchema,
+  job: threadSchema,
   messageHandler: z.union([MessageHandlerSchema, z.null()])
 });
 

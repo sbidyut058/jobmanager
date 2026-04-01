@@ -60,11 +60,11 @@ class JobController {
      * @param {Request} req - Express request object
      * @param {Response} res - Express response object
      */
-    getJobResponse = async (req: Request, res: Response) => {
+    getJobResponse = async (req: Request, res: Response): Promise<void> => {
         const { jobid } = req.query;
-        return utils.processResponseEntity(res, fetchJobResponse(Number(jobid)));
+        const response = fetchJobResponse(Number(jobid));
+        return utils.processResponseEntity(res, response);
     }
-
 }
 
 export default JobController;

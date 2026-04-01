@@ -1,6 +1,11 @@
-export const JOB_TYPES = {
-    SCHEDULER: "scheduler",
-    THREAD: "thread"
+export enum JOB_TYPES {
+    SCHEDULER = "scheduler",
+    THREAD = "thread"
+}
+
+export enum MESSAGE_TYPES {
+    DEFAULT = "default",
+    OTHER = "other"
 }
 
 export enum Status {
@@ -8,7 +13,8 @@ export enum Status {
   IN_QUEUE = 201,
   IN_PROGRESS = 202,
   CANCELLED = 499,
-  FAILED = 500
+  FAILED = 500,
+  NOT_FOUND = 404
 }
 
 export const STATUS_LABEL: Record<Status, string> = {
@@ -16,5 +22,6 @@ export const STATUS_LABEL: Record<Status, string> = {
   [Status.IN_QUEUE]: 'In Queue',
   [Status.IN_PROGRESS]: 'In Progress',
   [Status.CANCELLED]: 'Cancelled',
-  [Status.FAILED]: 'Failed'
+  [Status.FAILED]: 'Failed',
+  [Status.NOT_FOUND]: 'Not Found'
 };

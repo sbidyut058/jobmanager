@@ -1,13 +1,13 @@
 import { scheduleJob } from 'node-schedule';
-import { type ApiResponseType } from './validationSchemas/ApiResponseSchema.js';
+import { type ApiResponseType } from './validationSchemas/ApiResponse.js';
 import JobError from './exception/JobError.js';
-import utils from './utils/utils.js';
 import JobQueue from './JobQueue.js';
 import { JobQueueItemSchema } from './validationSchemas/JobQueueItem.js';
 import { sendMail } from './config/mail.js';
 import { ReqCreateJobSchema, type JobType, type ReqCreateJobType } from './validationSchemas/Job.js';
 import { CronExp } from './validationSchemas/CronExp.js';
-import { Status, STATUS_LABEL } from './utils/constants.js';
+import { JOB_TYPES, Status, STATUS_LABEL } from './utils/constants.js';
+import { type Transferable } from 'worker_threads';
 
 /** Map of jobId -> Job 
  * @type {Map<number, Job>}
@@ -45,14 +45,14 @@ const createJob = async (props: ReqCreateJobType): Promise<number> => {
         description,
         status: Status.IN_QUEUE,
         parentId,
-        response: { status: Status.IN_QUEUE, message: 'Job is in Queue' }
+        response: { status: Status.IN_QUEUE, message: STATUS_LABEL[Status.IN_QUEUE] },
     };
 
-    if (type === 'thread') {
+    if (type === JOB_TYPES.THREAD) {
         const jobData = JobQueueItemSchema.parse({ jobid, method, title, job, messageHandler });
         JobQueue.push(jobData);
         JobQueue.runNextJobFromQueue();
-    } else if (type === 'scheduler') {
+    } else if (type === JOB_TYPES.SCHEDULER) {
         if (!cronExp) throw new JobError(409, 'Provide Cron Expression');
         const cronExpString = CronExp(cronExp).toString();
 
@@ -82,7 +82,7 @@ const createJob = async (props: ReqCreateJobType): Promise<number> => {
                 }
                 console.log(`Scheduler job "${title}" triggered at ${new Date().toISOString()}`);
                 await createJob({
-                    type: 'thread',
+                    type: JOB_TYPES.THREAD,
                     title: `Child of scheduled job: ${title}`,
                     description: '',
                     parentId: jobid,
@@ -132,9 +132,9 @@ const cancelJob = (jobid: number): ApiResponseType => {
     const job = getJob(jobid);
     let resMsg = '';
 
-    if (job.type === 'thread') {
+    if (job.type === JOB_TYPES.THREAD) {
         if (job.executor) {
-            (job.executor as Worker).terminate();
+            job.executor.terminate();
             resMsg = `Job[${jobid}] Terminated Successfully`;
         } else {
             JobQueue.removeByJobId(jobid);
@@ -229,7 +229,7 @@ const getAllJobsDetail = (): ApiResponseType => {
         type: job.type,
         title: job.title,
         description: job.description,
-        status: utils.jobStatusFromCode(job.status),
+        status: STATUS_LABEL[job.status],
         children: Array.from(jobMap)
             .filter(([_, childJob]) => childJob.parentId && childJob.parentId >= 0 && childJob.parentId === id)
             .map(([childJobId, childJob]) =>
@@ -251,9 +251,9 @@ const getAllJobsDetail = (): ApiResponseType => {
 
 /** Get job response
  * @param {number} jobid - Job id of associate job
- * @returns {ApiResponseType|null} response - job Response
+ * @returns {ApiResponseType} response - job Response
 */
-const getJobResponse = (jobid: number): ApiResponseType | null => {
+const getJobResponse = (jobid: number): ApiResponseType => {
     const job = getJob(jobid);
     return job.response;
 }
@@ -262,8 +262,9 @@ const getJobResponse = (jobid: number): ApiResponseType | null => {
  * @param {number} jobid - Job id of associate job
  * @returns {Function|null} postMessage function or null if not a thread job or job not found
 */
-const getJobMainThreadPostMessage = (jobid: number) => {
+const getJobMainThreadPostMessage = (jobid: number): ((msg: any, transferables?: Transferable[]) => void) | null => {
     const job = getJob(jobid);
+    if (job.type !== JOB_TYPES.THREAD) return null;
     return job.executor ? job.executor.postMessage : null;
 }
 

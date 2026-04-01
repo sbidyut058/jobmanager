@@ -1,7 +1,6 @@
-import { type ApiResponseType } from "../validationSchemas/ApiResponseSchema.js";
+import { type ApiResponseType } from "../validationSchemas/ApiResponse.js";
 import { type Request, type Response, type NextFunction } from "express";
 import type { CronExpType } from "../validationSchemas/CronExp.js";
-import { STATUS_MAP } from "./constants.js";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const asyncHandler = (fn: (req: Request, res: Response, next?: NextFunction) => Promise<any>) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -40,22 +39,13 @@ const toCronExpression = (obj: CronExpType): string => {
 }
 
 /**
- * Maps HTTP-like status codes to job status strings.
- * @param {keyof typeof STATUS_MAP} code - Status code.
- * @returns {string} Job status string.
- */
-const jobStatusFromCode = (code: keyof typeof STATUS_MAP): string => {
-    return STATUS_MAP[code];
-}
-
-/**
  * For Payload Transformation of a job before current execution
  * @param {any} payload 
  * @returns {any}
  */
-const jobPayloadTransformer = (payload: Record<string, string | number | boolean | null | (() => any)>): Record<string, string | number | boolean | null> => {
+const jobPayloadTransformer = (payload: Record<string, string | number | boolean | Date | null | (() => any)>): Record<string, string | number | boolean | Date | null> => {
     return payload && Object.entries(payload)
-    .reduce<Record<string, string | number | boolean | null>>((acc, [key, value]) => {
+    .reduce<Record<string, string | number | boolean | Date | null>>((acc, [key, value]) => {
         acc[key] = typeof value === 'function' ? value() : value;
         return acc;
     }, {});
@@ -66,6 +56,5 @@ export default {
     asyncHandler,
     toCronExpression,
     processResponseEntity,
-    jobStatusFromCode,
     jobPayloadTransformer
 }

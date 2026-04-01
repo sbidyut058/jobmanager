@@ -1,7 +1,18 @@
-import { workerData, parentPort } from 'worker_threads';
+import { workerData, parentPort, type Transferable } from 'worker_threads';
 import JobError from './exception/JobError.js';
-import ApiResponseEntity from './models/ApiResponseEntity.js';
-import WorkerFunction from './models/WorkerFunction.js';
+import { WorkerDataSchema } from './validationSchemas/WorkerData.js';
+import { MESSAGE_TYPES, Status, STATUS_LABEL } from './utils/constants.js';
+import type { ChannelMessageType } from './validationSchemas/ChannelMessage.js';
+
+const sendMessage = (msg: ChannelMessageType, transferables?: Transferable[] | undefined) => {
+    if (parentPort) {
+        if(transferables) {
+            parentPort.postMessage(msg, transferables);
+            return;
+        }
+        parentPort.postMessage(msg);
+    }
+};
 
 /**
  * Worker thread entry point.
@@ -9,48 +20,32 @@ import WorkerFunction from './models/WorkerFunction.js';
  * Sends progress and final response back to parent thread via parentPort.
  */
 (async () => {
-    if (!workerData) throw new JobError(400, 'Missing worker data');
-
-
-    const parser = (json) => {
-        return json ? JSON.parse(json,
-            (key, value) =>
-                typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)
-                    ? new Date(value)
-                    : value
-        ): null
-    }
-
-    /** @type {number} */
-    const jobid = workerData.jobid;
-    /** @type {WorkerFunction} */
-    const method = parser(workerData.method);
-    /** @type {WorkerFunction|null} */
-    let workerOnMessage = parser(workerData.workerOnMessage);
+    const data = WorkerDataSchema.parse(workerData);
+    const { jobid, method, workerOnMessage } = data;
 
     /**
      * Sends an update message to parent thread
-     * @param {any} [data] - Optional progress data
+     * @param {Record<string, number | string | Date | null>} [data] - Optional progress data
      * @param {string} [type] - Message type
      */
-    const sendUpdate = (data, type) => {
-        if (type && type !== 'default') {
-            parentPort.postMessage(JSON.parse(JSON.stringify({
+    const sendUpdate = (data?: Record<string, number | string | Date | null>, type?: MESSAGE_TYPES) => {
+        let messageType: MESSAGE_TYPES = !type ? MESSAGE_TYPES.DEFAULT : type;
+        if (messageType === MESSAGE_TYPES.DEFAULT) {
+            sendMessage({
                 jobid,
-                type,
-                msg: data
-            })));
-            return;
-        } else {
-            parentPort.postMessage(JSON.parse(JSON.stringify({
-                jobid,
-                type: 'default',
-                msg: new ApiResponseEntity({
-                    status: 202,
+                type: messageType,
+                msg: {
+                    status: Status.IN_PROGRESS,
                     message: 'Job is in progress',
                     data
-                })
-            })));
+                }
+            });
+        } else {
+            sendMessage({
+                jobid,
+                type: messageType,
+                msg: data
+            });
         }
     };
 
@@ -58,10 +53,9 @@ import WorkerFunction from './models/WorkerFunction.js';
         const service = await import(workerOnMessage.serviceModule);
         if (!service) throw new JobError(404, 'Service Not Found');
         const instance = service.default ? service.default : service;
-        const fn = instance[workerOnMessage.method];
+        const fn = instance[workerOnMessage.name];
         if (!fn) throw new JobError(404, 'Function Not Found');
-        onMessage = fn.bind(instance);
-        parentPort.on('message', onMessage);
+        parentPort?.on('message', fn.bind(instance));
     }
 
     try {
@@ -83,9 +77,9 @@ import WorkerFunction from './models/WorkerFunction.js';
         // Handle file response
         if (response && response.constructor && response.constructor.name === 'File') {
             const buffer = Buffer.from(await response.arrayBuffer());
-            parentPort.postMessage({
+            sendMessage({
                 jobid,
-                type: 'default',
+                type: MESSAGE_TYPES.DEFAULT,
                 msg: {
                     status: 200,
                     message: 'job has Ended',
@@ -95,28 +89,28 @@ import WorkerFunction from './models/WorkerFunction.js';
                     },
                     data: buffer
                 }
-            }, [buffer.buffer]); // Transfer buffer for performance
+            }, [buffer.buffer]);
         } else {
-            parentPort.postMessage(JSON.parse(JSON.stringify({
+            sendMessage({
                 jobid,
-                type: 'default',
+                type: MESSAGE_TYPES.DEFAULT,
                 msg: {
                     status: 200,
                     message: 'Job has Ended'
                 }
-            })));
+            });
         }
     } catch (err) {
-        parentPort.postMessage(JSON.parse(JSON.stringify({
+        sendMessage({
             jobid,
-            type: 'default',
-            msg: new ApiResponseEntity({
-                status: 500,
-                message: err.message
-            })
-        })));
+            type: MESSAGE_TYPES.DEFAULT,
+            msg: {
+                status: Status.FAILED,
+                message: STATUS_LABEL[Status.FAILED] + ' - ' + (err as Error).message
+            }
+        });
     } finally {
-        parentPort.close();
+        parentPort?.close();
         process.exit(0);
     }
 })().catch(error => {

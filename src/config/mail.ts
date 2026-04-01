@@ -7,9 +7,9 @@ export type reqConfigType = {
   user: string;
   pass: string;
   from: string;
-  to?: string;
-  cc?: string;
-  bcc?: string;
+  to?: string | undefined;
+  cc?: string | undefined;
+  bcc?: string | undefined;
 }
 
 let transporter: Transporter | null = null;
